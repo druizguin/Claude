@@ -1,0 +1,44 @@
+{
+    "from": "users",
+    "select": ["name", "age", "email"],
+    "filter": {
+        "age": {
+            "gt": 18
+        },
+        "email": {
+            "like": "%@example.com"
+        },
+        "or": [
+            {
+                "status": "active"
+            },
+            {
+                "status": "pending"
+            }
+        ],
+        "and": [
+            {
+                "country": "USA"
+            },
+            {
+                "signup_date": {
+                    "gte": "2023-01-01"
+                }
+            }
+        ]
+    },
+    "orderby": [
+        {
+            "field": "name",
+            "direction": "asc"
+        },
+        {
+            "field": "age",
+            "direction": "desc"
+        }
+    ]
+    , "page": {
+        "from": 10,
+        "offset": 20
+    }
+}

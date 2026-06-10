@@ -1,0 +1,198 @@
+@page "/audit"
+@inject DataBridgeApiClient Api
+
+<PageTitle>Audit Log</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3><i class="bi bi-journal-check text-danger me-2"></i>Audit Log
+        <span class="badge bg-secondary fs-6 ms-2">@_total</span>
+    </h3>
+</div>
+
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body p-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Operation</label>
+                <select class="form-select form-select-sm" @bind="_fOp" @bind:after="Reload">
+                    <option value="">All</option>
+                    <option value="Create">Create</option>
+                    <option value="Read">Read</option>
+                    <option value="Update">Update</option>
+                    <option value="Delete">Delete</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Entity Type</label>
+                <select class="form-select form-select-sm" @bind="_fEntity" @bind:after="Reload">
+                    <option value="">All</option>
+                    <option value="Product">Product</option>
+                    <option value="User">User</option>
+                    <option value="Purchase">Purchase</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Person</label>
+                <input class="form-control form-control-sm" placeholder="Search name…"
+                       value="@_fPerson" @oninput="HandlePersonInput" />
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-outline-secondary btn-sm" @onclick="ClearFilters">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th class="sortable" @onclick='@(() => SortBy("timestamp"))'>
+                        Timestamp @SortIcon("timestamp")
+                    </th>
+                    <th>Operation</th>
+                    <th class="sortable" @onclick='@(() => SortBy("entityType"))'>
+                        Entity Type @SortIcon("entityType")
+                    </th>
+                    <th>Entity ID</th>
+                    <th>Person</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_loading)
+                {
+                    <tr><td colspan="5" class="text-center py-4">
+                        <div class="spinner-border spinner-border-sm text-danger me-2"></div>Loading…
+                    </td></tr>
+                }
+                else if (!_records.Any())
+                {
+                    <tr><td colspan="5" class="text-center py-4 text-muted">
+                        No audit records found.
+                    </td></tr>
+                }
+                else
+                {
+                    @foreach (var r in _records)
+                    {
+                        <tr>
+                            <td class="small">@r.Timestamp.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</td>
+                            <td>
+                                <span class="badge @OpBadge(r.OperationType)">
+                                    <i class="bi @OpIcon(r.OperationType) me-1"></i>@r.OperationType
+                                </span>
+                            </td>
+                            <td>@r.EntityType</td>
+                            <td><code class="small">@r.EntityId[..8]…</code></td>
+                            <td>
+                                <i class="bi bi-person-fill me-1 text-muted"></i>@r.PersonName
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+        <Pagination TotalCount="_total" PageSize="_pageSize"
+                    CurrentPage="_page" OnPageChanged="OnPageChanged" />
+        <select class="form-select form-select-sm w-auto" @bind="_pageSize" @bind:after="Reload">
+            <option value="10">10 / page</option>
+            <option value="20">20 / page</option>
+            <option value="50">50 / page</option>
+        </select>
+    </div>
+</div>
+
+@code {
+    private List<AuditRecordDto> _records = new();
+    private int     _total; int _page; int _pageSize = 20;
+    private string  _sortField = "timestamp", _sortDir = "desc";
+    private bool    _loading = true;
+    private string  _fOp = "", _fEntity = "";
+    private string? _fPerson;
+
+    protected override async Task OnInitializedAsync() => await Reload();
+
+    private async Task Reload()
+    {
+        _loading = true; StateHasChanged();
+
+        var filter = BuildFilter();
+        var (items, total) = await Api.QueryAsync<AuditRecordDto>("audit", new QuerySpec
+        {
+            From    = "audit-records",
+            Filter  = filter,
+            OrderBy = new() { new OrderBySpec { Field = _sortField, Direction = _sortDir } },
+            Page    = new PageSpec { From = _page * _pageSize, Offset = _pageSize }
+        });
+        _records = items; _total = total; _loading = false;
+    }
+
+    private object? BuildFilter()
+    {
+        var f = new Dictionary<string, object>();
+        if (!string.IsNullOrWhiteSpace(_fOp))     f["OperationType"] = (object)_fOp;
+        if (!string.IsNullOrWhiteSpace(_fEntity)) f["EntityType"]    = (object)_fEntity;
+        if (!string.IsNullOrWhiteSpace(_fPerson)) f["PersonName"]    = new { like = $"%{_fPerson}%" };
+        return f.Any() ? f : null;
+    }
+
+    private void HandlePersonInput(ChangeEventArgs e)
+    {
+        _fPerson = e.Value?.ToString() ?? "";
+        ScheduleReload();
+    }
+
+    private System.Threading.Timer? _debounce;
+    private void ScheduleReload()
+    {
+        _debounce?.Dispose();
+        _debounce = new System.Threading.Timer(async _ =>
+        {
+            _page = 0; await InvokeAsync(Reload);
+        }, null, 400, System.Threading.Timeout.Infinite);
+    }
+
+    private void OnFilterInput(ChangeEventArgs _) => ScheduleReload();
+
+    private async Task OnPageChanged(int p) { _page = p; await Reload(); }
+
+    private async Task SortBy(string field)
+    {
+        if (_sortField == field) _sortDir = _sortDir == "asc" ? "desc" : "asc";
+        else { _sortField = field; _sortDir = "desc"; }
+        _page = 0; await Reload();
+    }
+
+    private void ClearFilters() { _fOp = ""; _fEntity = ""; _fPerson = null; _page = 0; _ = Reload(); }
+
+    private RenderFragment SortIcon(string field) => __builder =>
+    {
+        if (_sortField != field) return;
+        __builder.AddMarkupContent(0, _sortDir == "asc"
+            ? "<i class=\"bi bi-caret-up-fill ms-1 text-muted small\"></i>"
+            : "<i class=\"bi bi-caret-down-fill ms-1 text-muted small\"></i>");
+    };
+
+    private static string OpBadge(string op) => op switch
+    {
+        "Create" => "bg-success",
+        "Update" => "bg-warning text-dark",
+        "Delete" => "bg-danger",
+        "Read"   => "bg-info text-dark",
+        _        => "bg-secondary"
+    };
+
+    private static string OpIcon(string op) => op switch
+    {
+        "Create" => "bi-plus-circle",
+        "Update" => "bi-pencil",
+        "Delete" => "bi-trash",
+        "Read"   => "bi-eye",
+        _        => "bi-question-circle"
+    };
+}

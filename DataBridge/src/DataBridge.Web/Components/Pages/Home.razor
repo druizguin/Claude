@@ -1,0 +1,116 @@
+@page "/"
+@inject DataBridgeApiClient Api
+
+<PageTitle>DataBridge — Home</PageTitle>
+
+<h2 class="mb-4"><i class="bi bi-database-fill-gear me-2 text-primary"></i>DataBridge Dashboard</h2>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <a href="/products" class="text-decoration-none">
+            <div class="card border-0 shadow-sm h-100 text-center p-3">
+                <i class="bi bi-basket2-fill text-success fs-1"></i>
+                <h5 class="mt-2">Products</h5>
+                <div class="display-6 fw-bold text-success">@_productCount</div>
+                <small class="text-muted">Source: Excel (.xlsx)</small>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="/users" class="text-decoration-none">
+            <div class="card border-0 shadow-sm h-100 text-center p-3">
+                <i class="bi bi-people-fill text-primary fs-1"></i>
+                <h5 class="mt-2">Users</h5>
+                <div class="display-6 fw-bold text-primary">@_userCount</div>
+                <small class="text-muted">Source: SQLite + CSV addresses</small>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="/purchases" class="text-decoration-none">
+            <div class="card border-0 shadow-sm h-100 text-center p-3">
+                <i class="bi bi-cart-fill text-warning fs-1"></i>
+                <h5 class="mt-2">Purchases</h5>
+                <div class="display-6 fw-bold text-warning">@_purchaseCount</div>
+                <small class="text-muted">Source: CSV</small>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="/audit" class="text-decoration-none">
+            <div class="card border-0 shadow-sm h-100 text-center p-3">
+                <i class="bi bi-journal-check text-danger fs-1"></i>
+                <h5 class="mt-2">Audit Records</h5>
+                <div class="display-6 fw-bold text-danger">@_auditCount</div>
+                <small class="text-muted">Source: CSV (audit.csv)</small>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white fw-semibold">Architecture Overview</div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <h6>Unit of Work features</h6>
+                <ul class="list-group list-group-flush small">
+                    <li class="list-group-item"><i class="bi bi-check-circle-fill text-success me-2"></i>Query engine: filter, sort, paginate, project</li>
+                    <li class="list-group-item"><i class="bi bi-check-circle-fill text-success me-2"></i>Cross-source navigation (User.AddressPrincipal → CSV)</li>
+                    <li class="list-group-item"><i class="bi bi-check-circle-fill text-success me-2"></i>Distributed transactions (saga / 2PC)</li>
+                    <li class="list-group-item"><i class="bi bi-check-circle-fill text-success me-2"></i>Parallel queries across sources</li>
+                    <li class="list-group-item"><i class="bi bi-check-circle-fill text-success me-2"></i>Audit log — every write recorded</li>
+                </ul>
+            </div>
+            <div class="col-md-6">
+                <h6>Filter operators supported</h6>
+                <div class="d-flex flex-wrap gap-1">
+                    @foreach (var op in FilterOps)
+                    {
+                        <span class="badge bg-secondary">@op</span>
+                    }
+                </div>
+                <h6 class="mt-3">QuerySpec example</h6>
+                <pre class="bg-light p-2 rounded" style="font-size:11px">@QuerySpecExample</pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int _productCount, _userCount, _purchaseCount, _auditCount;
+
+    private static readonly string[] FilterOps =
+        ["eq","neq","gt","gte","lt","lte","like","contains","startsWith","endsWith","in","and","or","not"];
+
+    private static readonly string QuerySpecExample =
+        "{\n" +
+        "  \"from\": \"products\",\n" +
+        "  \"filter\": {\n" +
+        "    \"price\": { \"gt\": 2.0 },\n" +
+        "    \"or\": [\n" +
+        "      { \"category\": \"Fruits\" },\n" +
+        "      { \"category\": \"Dairy\" }\n" +
+        "    ]\n" +
+        "  },\n" +
+        "  \"orderby\": [{\"field\":\"price\",\"direction\":\"asc\"}],\n" +
+        "  \"page\": {\"from\":0,\"offset\":10}\n" +
+        "}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var page = new PageSpec { From = 0, Offset = 1 };
+
+        var t1 = Api.QueryAsync<ProductDto>("products",  new QuerySpec { From = "products",  Page = page });
+        var t2 = Api.QueryAsync<UserDto>("users",        new QuerySpec { From = "users",     Page = page });
+        var t3 = Api.QueryAsync<PurchaseDto>("purchases",new QuerySpec { From = "purchases", Page = page });
+        var t4 = Api.QueryAsync<AuditRecordDto>("audit", new QuerySpec { From = "audit",     Page = page });
+
+        await Task.WhenAll(t1, t2, t3, t4);
+
+        _productCount  = (await t1).Total;
+        _userCount     = (await t2).Total;
+        _purchaseCount = (await t3).Total;
+        _auditCount    = (await t4).Total;
+    }
+}

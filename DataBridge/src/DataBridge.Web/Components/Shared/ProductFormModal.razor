@@ -1,0 +1,127 @@
+@inject DataBridgeApiClient Api
+
+<div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,.5)">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-basket2 me-2"></i>@(IsEdit ? "Edit" : "New") Product
+                </h5>
+                <button class="btn-close" @onclick="OnCancel"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Name <span class="text-danger">*</span></label>
+                    <input class="form-control @(NameError ? "is-invalid" : "")"
+                           @bind="_name" placeholder="e.g. Apple" />
+                    @if (NameError) { <div class="invalid-feedback">Name is required.</div> }
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Category <span class="text-danger">*</span></label>
+                    <select class="form-select @(CatError ? "is-invalid" : "")" @bind="_category">
+                        <option value="">— Select —</option>
+                        @foreach (var c in Categories) { <option>@c</option> }
+                    </select>
+                    @if (CatError) { <div class="invalid-feedback">Category is required.</div> }
+                </div>
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="form-label">Price <span class="text-danger">*</span></label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">€</span>
+                            <input class="form-control" type="number" step="0.01" min="0"
+                                   @bind="_price" />
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Stock Qty</label>
+                        <input class="form-control" type="number" min="0" @bind="_stock" />
+                    </div>
+                </div>
+                <div class="mb-3 mt-3">
+                    <label class="form-label">Barcode</label>
+                    <input class="form-control" @bind="_barcode" placeholder="EAN13…" />
+                </div>
+                <div class="mb-1">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-control" rows="2" @bind="_desc"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="OnCancel" disabled="@_saving">Cancel</button>
+                <button class="btn btn-primary" @onclick="Save" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                    Save
+                </button>
+            </div>
+            @if (_error != null)
+            {
+                <div class="alert alert-danger m-3 mb-0 p-2 small">@_error</div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private static readonly string[] Categories =
+        ["Fruits", "Vegetables", "Dairy", "Bakery", "Beverages"];
+
+    [Parameter] public ProductDto? Product  { get; set; }
+    [Parameter] public EventCallback OnSave   { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private string  _name     = "";
+    private string  _category = "";
+    private decimal _price;
+    private int     _stock;
+    private string  _barcode  = "";
+    private string? _desc;
+    private bool    _saving;
+    private string? _error;
+    private bool    _submitted;
+
+    private bool IsEdit     => !string.IsNullOrEmpty(Product?.Id);
+    private bool NameError  => _submitted && string.IsNullOrWhiteSpace(_name);
+    private bool CatError   => _submitted && string.IsNullOrWhiteSpace(_category);
+
+    protected override void OnParametersSet()
+    {
+        if (Product != null)
+        {
+            _name     = Product.Name;
+            _category = Product.Category;
+            _price    = Product.Price;
+            _stock    = Product.StockQuantity;
+            _barcode  = Product.Barcode;
+            _desc     = Product.Description;
+        }
+    }
+
+    private async Task Save()
+    {
+        _submitted = true;
+        if (string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_category)) return;
+
+        _saving = true;
+        _error  = null;
+        try
+        {
+            var attrs = new
+            {
+                Name          = _name,
+                Category      = _category,
+                Price         = _price,
+                StockQuantity = _stock,
+                Barcode       = _barcode,
+                Description   = _desc
+            };
+
+            if (IsEdit) await Api.UpdateAsync<ProductDto>("products", Product!.Id, attrs);
+            else        await Api.CreateAsync<ProductDto>("products", attrs);
+
+            await OnSave.InvokeAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+}

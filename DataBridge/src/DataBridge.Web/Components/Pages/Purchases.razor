@@ -1,0 +1,183 @@
+@page "/purchases"
+@inject DataBridgeApiClient Api
+
+<PageTitle>Purchases</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3><i class="bi bi-cart-fill text-warning me-2"></i>Purchases
+        <span class="badge bg-secondary fs-6 ms-2">@_total</span>
+    </h3>
+    <button class="btn btn-primary" @onclick="OpenCreate">
+        <i class="bi bi-cart-plus me-1"></i>New Purchase
+    </button>
+</div>
+
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body p-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Status</label>
+                <select class="form-select form-select-sm" @bind="_fStatus" @bind:after="Reload">
+                    <option value="">All</option>
+                    <option value="completed">Completed</option>
+                    <option value="pending">Pending</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-outline-secondary btn-sm" @onclick="ClearFilters">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th class="sortable" @onclick='@(() => SortBy("purchaseDate"))'>
+                        Date @SortIcon("purchaseDate")
+                    </th>
+                    <th>User ID</th>
+                    <th>Product ID</th>
+                    <th class="sortable" @onclick='@(() => SortBy("quantity"))'>
+                        Qty @SortIcon("quantity")
+                    </th>
+                    <th class="sortable" @onclick='@(() => SortBy("totalPrice"))'>
+                        Total @SortIcon("totalPrice")
+                    </th>
+                    <th>Status</th>
+                    <th style="width:60px">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_loading)
+                {
+                    <tr><td colspan="7" class="text-center py-4">
+                        <div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading…
+                    </td></tr>
+                }
+                else if (!_purchases.Any())
+                {
+                    <tr><td colspan="7" class="text-center py-4 text-muted">No purchases found.</td></tr>
+                }
+                else
+                {
+                    @foreach (var p in _purchases)
+                    {
+                        <tr>
+                            <td>@p.PurchaseDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                            <td><code class="small">@p.UserId[..8]…</code></td>
+                            <td><code class="small">@p.ProductId[..8]…</code></td>
+                            <td>@p.Quantity</td>
+                            <td class="fw-semibold">@p.TotalPrice.ToString("C2")</td>
+                            <td><span class="badge @StatusBadge(p.Status)">@p.Status</span></td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-danger"
+                                        @onclick="@(() => DeletePurchase(p))">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+        <Pagination TotalCount="_total" PageSize="_pageSize"
+                    CurrentPage="_page" OnPageChanged="OnPageChanged" />
+        <select class="form-select form-select-sm w-auto" @bind="_pageSize" @bind:after="Reload">
+            <option value="10">10 / page</option>
+            <option value="20">20 / page</option>
+            <option value="50">50 / page</option>
+        </select>
+    </div>
+</div>
+
+@if (_alert != null)
+{
+    <div class="alert @_alertCss alert-dismissible mt-3">
+        @_alert <button type="button" class="btn-close" @onclick="@(() => _alert = null)"></button>
+    </div>
+}
+
+@if (_showForm)
+{
+    <PurchaseFormModal OnSave="OnSaved" OnCancel="@(() => _showForm = false)" />
+}
+
+<ConfirmModal @ref="_confirm" Message="Delete this purchase?" />
+
+@code {
+    private List<PurchaseDto> _purchases = new();
+    private int     _total; int _page; int _pageSize = 10;
+    private string  _sortField = "purchaseDate", _sortDir = "desc";
+    private bool    _loading = true, _showForm;
+    private string? _alert, _fStatus;
+    private string  _alertCss = "alert-success";
+    private PurchaseDto? _deleting;
+    private ConfirmModal _confirm = default!;
+
+    protected override async Task OnInitializedAsync() => await Reload();
+
+    private async Task Reload()
+    {
+        _loading = true; StateHasChanged();
+        var filter = !string.IsNullOrWhiteSpace(_fStatus)
+            ? (object)new Dictionary<string, object> { ["status"] = _fStatus! }
+            : null;
+
+        var (items, total) = await Api.QueryAsync<PurchaseDto>("purchases", new QuerySpec
+        {
+            From    = "purchases",
+            Filter  = filter,
+            OrderBy = new() { new OrderBySpec { Field = _sortField, Direction = _sortDir } },
+            Page    = new PageSpec { From = _page * _pageSize, Offset = _pageSize }
+        });
+        _purchases = items; _total = total; _loading = false;
+    }
+
+    private async Task OnPageChanged(int page) { _page = page; await Reload(); }
+
+    private async Task SortBy(string field)
+    {
+        if (_sortField == field) _sortDir = _sortDir == "asc" ? "desc" : "asc";
+        else { _sortField = field; _sortDir = field == "purchaseDate" ? "desc" : "asc"; }
+        _page = 0; await Reload();
+    }
+
+    private void ClearFilters() { _fStatus = null; _page = 0; _ = Reload(); }
+    private void OpenCreate()   { _showForm = true; }
+
+    private async Task OnSaved()
+    {
+        _showForm = false; ShowAlert("Purchase created.", "alert-success"); await Reload();
+    }
+
+    private async Task DeletePurchase(PurchaseDto p)
+    {
+        _deleting = p;
+        if (!await _confirm.ShowAsync()) return;
+        try   { await Api.DeleteAsync("purchases", p.Id); ShowAlert("Deleted.", "alert-warning"); await Reload(); }
+        catch { ShowAlert("Delete failed.", "alert-danger"); }
+    }
+
+    private void ShowAlert(string msg, string css)
+    {
+        _alert = msg; _alertCss = css; StateHasChanged();
+        Task.Delay(3000).ContinueWith(_ => InvokeAsync(() => { _alert = null; StateHasChanged(); }));
+    }
+
+    private RenderFragment SortIcon(string field) => __builder =>
+    {
+        if (_sortField != field) return;
+        __builder.AddMarkupContent(0, _sortDir == "asc"
+            ? "<i class=\"bi bi-caret-up-fill ms-1 text-muted small\"></i>"
+            : "<i class=\"bi bi-caret-down-fill ms-1 text-muted small\"></i>");
+    };
+
+    private static string StatusBadge(string s) => s == "completed" ? "bg-success" : "bg-warning text-dark";
+}

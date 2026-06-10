@@ -1,0 +1,19 @@
+@inject NavigationManager Nav
+
+<li class="nav-item mb-1">
+    <a href="@Href"
+       class="nav-link text-white rounded @(IsActive ? "bg-primary" : "")">
+        <i class="bi bi-@Icon me-2"></i>@Label
+    </a>
+</li>
+
+@code {
+    [Parameter] public string Href  { get; set; } = "/";
+    [Parameter] public string Icon  { get; set; } = "circle";
+    [Parameter] public string Label { get; set; } = "";
+
+    private bool IsActive =>
+        Href == "/"
+            ? Nav.Uri == Nav.BaseUri
+            : Nav.Uri.StartsWith(Nav.BaseUri.TrimEnd('/') + Href, StringComparison.OrdinalIgnoreCase);
+}

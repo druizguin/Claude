@@ -1,0 +1,27 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:\\Users\\david.ruizguin\\Desktop\\Projects",
+        "C:\\Users\\david.ruizguin\\Downloads"
+      ]
+    },
+    "memory": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "env": {
+        "MEMORY_DB_PATH": "C:\\Users\\david.ruizguin\\AppData\\Roaming\\Claude\\memory.sqlite"
+      }
+    },
+    "weather-mcp": {
+      "command": "py", 
+      "args": ["--directory", "/path/to/weather/folder", "run", "weather.py"]
+    },
+  }
+}

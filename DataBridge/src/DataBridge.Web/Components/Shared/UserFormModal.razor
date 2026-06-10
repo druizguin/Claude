@@ -1,0 +1,91 @@
+@inject DataBridgeApiClient Api
+
+<div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,.5)">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-person me-2"></i>@(IsEdit ? "Edit" : "New") User
+                </h5>
+                <button class="btn-close" @onclick="OnCancel"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label">Full Name <span class="text-danger">*</span></label>
+                        <input class="form-control @(NameErr?"is-invalid":"")" @bind="_name" />
+                        @if (NameErr) { <div class="invalid-feedback">Required.</div> }
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Email <span class="text-danger">*</span></label>
+                        <input class="form-control @(EmailErr?"is-invalid":"")" type="email" @bind="_email" />
+                        @if (EmailErr) { <div class="invalid-feedback">Valid email required.</div> }
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Age</label>
+                        <input class="form-control" type="number" min="0" max="150" @bind="_age" />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Country</label>
+                        <input class="form-control" @bind="_country" placeholder="e.g. USA" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Status</label>
+                        <select class="form-select" @bind="_status">
+                            <option value="active">Active</option>
+                            <option value="pending">Pending</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="OnCancel" disabled="@_saving">Cancel</button>
+                <button class="btn btn-primary" @onclick="Save" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                    Save
+                </button>
+            </div>
+            @if (_error != null) { <div class="alert alert-danger m-3 mb-0 p-2 small">@_error</div> }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public UserDto?  User      { get; set; }
+    [Parameter] public EventCallback OnSave   { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private string _name = "", _email = "", _country = "", _status = "active";
+    private int _age;
+    private bool _saving, _submitted;
+    private string? _error;
+
+    private bool IsEdit    => !string.IsNullOrEmpty(User?.Id);
+    private bool NameErr   => _submitted && string.IsNullOrWhiteSpace(_name);
+    private bool EmailErr  => _submitted && (string.IsNullOrWhiteSpace(_email) || !_email.Contains('@'));
+
+    protected override void OnParametersSet()
+    {
+        if (User != null)
+        {
+            _name = User.Name; _email = User.Email;
+            _age  = User.Age;  _country = User.Country; _status = User.Status;
+        }
+    }
+
+    private async Task Save()
+    {
+        _submitted = true;
+        if (NameErr || EmailErr) return;
+        _saving = true; _error = null;
+        try
+        {
+            var attrs = new { Name = _name, Email = _email, Age = _age, Country = _country, Status = _status };
+            if (IsEdit) await Api.UpdateAsync<UserDto>("users", User!.Id, attrs);
+            else        await Api.CreateAsync<UserDto>("users", attrs);
+            await OnSave.InvokeAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+}

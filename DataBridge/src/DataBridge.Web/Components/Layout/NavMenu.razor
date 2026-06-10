@@ -1,0 +1,27 @@
+@inject NavigationManager Nav
+
+<nav class="d-flex flex-column bg-dark text-white" style="width:220px;min-height:100vh">
+    <div class="p-3 border-bottom border-secondary">
+        <i class="bi bi-hexagon-fill text-primary me-2"></i>
+        <strong>DataBridge</strong>
+    </div>
+
+    <ul class="nav flex-column mt-2 px-2">
+        <NavItem Href="/" Icon="house" Label="Home" />
+        <NavItem Href="/products"  Icon="basket2-fill"     Label="Products"  />
+        <NavItem Href="/users"     Icon="people-fill"      Label="Users"     />
+        <NavItem Href="/purchases" Icon="cart-fill"        Label="Purchases" />
+        <NavItem Href="/audit"     Icon="journal-check"    Label="Audit Log" />
+    </ul>
+
+    <div class="mt-auto p-3 border-top border-secondary small text-secondary">
+        <div><i class="bi bi-file-earmark-excel text-success me-1"></i>Products → Excel</div>
+        <div><i class="bi bi-server text-info me-1"></i>Users → SQLite</div>
+        <div><i class="bi bi-file-earmark-text me-1"></i>Purchases → CSV</div>
+        <div><i class="bi bi-file-earmark-text me-1"></i>Addresses → CSV</div>
+    </div>
+</nav>
+
+@code {
+    // NavItem is defined below as a nested private component pattern via a helper
+}

@@ -1,0 +1,14 @@
+<Router AppAssembly="typeof(Program).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(DataBridge.Web.Components.Layout.MainLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(DataBridge.Web.Components.Layout.MainLayout)">
+            <div class="text-center mt-5">
+                <h3>404 — Page not found</h3>
+                <a href="/" class="btn btn-primary mt-3">Go Home</a>
+            </div>
+        </LayoutView>
+    </NotFound>
+</Router>

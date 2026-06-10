@@ -1,0 +1,33 @@
+@use '@angular/material' as mat;
+
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+}
+
+.page-container {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.toolbar-spacer { flex: 1 1 auto; }
+
+.filter-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.filter-row mat-form-field { flex: 1; min-width: 200px; }
+
+.actions-cell { white-space: nowrap; }
+
+.mat-mdc-card { margin-bottom: 24px; }
+
+.chip-active   { background: #c8e6c9 !important; }
+.chip-pending  { background: #fff9c4 !important; }
+.chip-inactive { background: #ffcdd2 !important; }

@@ -1,0 +1,284 @@
+@page "/users"
+@inject DataBridgeApiClient Api
+
+<PageTitle>Users</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3><i class="bi bi-people-fill text-primary me-2"></i>Users
+        <span class="badge bg-secondary fs-6 ms-2">@_total</span>
+    </h3>
+    <button class="btn btn-primary" @onclick="OpenCreate">
+        <i class="bi bi-person-plus me-1"></i>New User
+    </button>
+</div>
+
+<!-- Filters -->
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body p-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Search</label>
+                <input class="form-control form-control-sm" placeholder="Name or email…"
+                       value="@_fSearch" @oninput="HandleSearchInput" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Country</label>
+                <input class="form-control form-control-sm" placeholder="e.g. USA"
+                       @bind="_fCountry" @bind:after="Reload" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Status</label>
+                <select class="form-select form-select-sm" @bind="_fStatus" @bind:after="Reload">
+                    <option value="">All</option>
+                    <option value="active">Active</option>
+                    <option value="pending">Pending</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-outline-secondary btn-sm" @onclick="ClearFilters">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th class="sortable" @onclick='@(() => SortBy("name"))'>Name @SortIcon("name")</th>
+                    <th>Email</th>
+                    <th class="sortable" @onclick='@(() => SortBy("age"))'>Age @SortIcon("age")</th>
+                    <th class="sortable" @onclick='@(() => SortBy("country"))'>Country @SortIcon("country")</th>
+                    <th>Status</th>
+                    <th>Address <small class="text-muted">(cross-source)</small></th>
+                    <th style="width:100px">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_loading)
+                {
+                    <tr><td colspan="7" class="text-center py-4">
+                        <div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading…
+                    </td></tr>
+                }
+                else if (!_users.Any())
+                {
+                    <tr><td colspan="7" class="text-center py-4 text-muted">No users found.</td></tr>
+                }
+                else
+                {
+                    @foreach (var u in _users)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@u.Name</td>
+                            <td><a href="mailto:@u.Email">@u.Email</a></td>
+                            <td>@u.Age</td>
+                            <td>@u.Country</td>
+                            <td>
+                                <span class="badge @StatusBadge(u.Status)">@u.Status</span>
+                            </td>
+                            <td class="small text-muted">
+                                @if (u.AddressPrincipal != null)
+                                {
+                                    <span title="@u.AddressPrincipal.Street, @u.AddressPrincipal.ZipCode">
+                                        <i class="bi bi-geo-alt-fill me-1 text-danger"></i>
+                                        @u.AddressPrincipal.Street, @u.AddressPrincipal.City
+                                    </span>
+                                }
+                                else { <span class="text-muted">—</span> }
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary me-1"
+                                        @onclick="@(() => OpenEdit(u))">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger"
+                                        @onclick="@(() => DeleteUser(u))">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+        <Pagination TotalCount="_total" PageSize="_pageSize"
+                    CurrentPage="_page" OnPageChanged="OnPageChanged" />
+        <select class="form-select form-select-sm w-auto" @bind="_pageSize" @bind:after="Reload">
+            <option value="5">5 / page</option>
+            <option value="10">10 / page</option>
+            <option value="20">20 / page</option>
+        </select>
+    </div>
+</div>
+
+@if (_alert != null)
+{
+    <div class="alert @_alertCss alert-dismissible mt-3" role="alert">
+        @_alert
+        <button type="button" class="btn-close" @onclick="@(() => _alert = null)"></button>
+    </div>
+}
+
+@if (_showForm)
+{
+    <UserFormModal User="_editing" OnSave="OnSaved" OnCancel="@(() => _showForm = false)" />
+}
+
+<ConfirmModal @ref="_confirm" Message="@_confirmMsg" />
+
+@code {
+    private List<UserDto> _users = new();
+    private int     _total;
+    private int     _page;
+    private int     _pageSize  = 10;
+    private string  _sortField = "name";
+    private string  _sortDir   = "asc";
+    private bool    _loading   = true;
+    private bool    _showForm;
+    private string? _alert;
+    private string  _alertCss  = "alert-success";
+    private string? _fSearch;
+    private string  _fCountry  = "";
+    private string  _fStatus   = "";
+    private UserDto? _editing;
+    private string _confirmMsg = "Are you sure?";
+    private ConfirmModal _confirm = default!;
+
+    protected override async Task OnInitializedAsync() => await Reload();
+
+    private async Task Reload()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        var filter = BuildFilter();
+        var spec   = new QuerySpec
+        {
+            From    = "users",
+            Select  = new() { "name","email","age","country","status","signupDate",
+                              "addressPrincipalId","AddressPrincipal.street","AddressPrincipal.city",
+                              "AddressPrincipal.zipCode","AddressPrincipal.country" },
+            Filter  = filter,
+            OrderBy = new() { new OrderBySpec { Field = _sortField, Direction = _sortDir } },
+            Page    = new PageSpec { From = _page * _pageSize, Offset = _pageSize }
+        };
+
+        var (items, total) = await Api.QueryAsync<UserDto>("users", spec);
+        _users   = items;
+        _total   = total;
+        _loading = false;
+    }
+
+    private object? BuildFilter()
+    {
+        var conditions = new List<object>();
+
+        if (!string.IsNullOrWhiteSpace(_fSearch))
+            conditions.Add(new Dictionary<string, object>
+            {
+                ["or"] = new object[]
+                {
+                    new Dictionary<string,object>{ ["name"]  = new { like = $"%{_fSearch}%" } },
+                    new Dictionary<string,object>{ ["email"] = new { like = $"%{_fSearch}%" } }
+                }
+            });
+
+        if (!string.IsNullOrWhiteSpace(_fCountry))
+            conditions.Add(new Dictionary<string, object> { ["country"] = (object)_fCountry });
+        if (!string.IsNullOrWhiteSpace(_fStatus))
+            conditions.Add(new Dictionary<string, object> { ["status"] = (object)_fStatus });
+
+        if (!conditions.Any()) return null;
+        if (conditions.Count == 1) return conditions[0];
+        return new Dictionary<string, object> { ["and"] = conditions };
+    }
+
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        _fSearch = e.Value?.ToString() ?? "";
+        ScheduleReload();
+    }
+
+    private System.Threading.Timer? _debounce;
+    private void ScheduleReload()
+    {
+        _debounce?.Dispose();
+        _debounce = new System.Threading.Timer(async _ =>
+        {
+            _page = 0;
+            await InvokeAsync(Reload);
+        }, null, 400, System.Threading.Timeout.Infinite);
+    }
+
+    private void OnFilterInput(ChangeEventArgs _) => ScheduleReload();
+
+    private async Task OnPageChanged(int page) { _page = page; await Reload(); }
+
+    private async Task SortBy(string field)
+    {
+        if (_sortField == field) _sortDir = _sortDir == "asc" ? "desc" : "asc";
+        else { _sortField = field; _sortDir = "asc"; }
+        _page = 0;
+        await Reload();
+    }
+
+    private void ClearFilters()
+    {
+        _fSearch = null; _fCountry = ""; _fStatus = "";
+        _page    = 0;
+        _ = Reload();
+    }
+
+    private void OpenCreate() { _editing = new UserDto(); _showForm = true; }
+    private void OpenEdit(UserDto u) { _editing = u; _showForm = true; }
+
+    private async Task OnSaved()
+    {
+        _showForm = false;
+        ShowAlert("Saved successfully.", "alert-success");
+        await Reload();
+    }
+
+    private async Task DeleteUser(UserDto u)
+    {
+        _editing    = u;
+        _confirmMsg = $"Delete user \"{u.Name}\"?";
+        if (!await _confirm.ShowAsync()) return;
+        try
+        {
+            await Api.DeleteAsync("users", u.Id);
+            ShowAlert($"User \"{u.Name}\" deleted.", "alert-warning");
+            await Reload();
+        }
+        catch { ShowAlert("Delete failed.", "alert-danger"); }
+    }
+
+    private void ShowAlert(string msg, string css)
+    {
+        _alert    = msg; _alertCss = css;
+        StateHasChanged();
+        Task.Delay(3000).ContinueWith(_ => InvokeAsync(() => { _alert = null; StateHasChanged(); }));
+    }
+
+    private RenderFragment SortIcon(string field) => __builder =>
+    {
+        if (_sortField != field) return;
+        __builder.AddMarkupContent(0, _sortDir == "asc"
+            ? "<i class=\"bi bi-caret-up-fill ms-1 text-muted small\"></i>"
+            : "<i class=\"bi bi-caret-down-fill ms-1 text-muted small\"></i>");
+    };
+
+    private static string StatusBadge(string s) => s switch
+    {
+        "active"   => "bg-success",
+        "pending"  => "bg-warning text-dark",
+        _          => "bg-secondary"
+    };
+}

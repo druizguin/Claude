@@ -1,0 +1,287 @@
+@page "/products"
+@inject DataBridgeApiClient Api
+
+<PageTitle>Products</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3><i class="bi bi-basket2-fill text-success me-2"></i>Products
+        <span class="badge bg-secondary fs-6 ms-2">@_total</span>
+    </h3>
+    <button class="btn btn-primary" @onclick="OpenCreate">
+        <i class="bi bi-plus-circle me-1"></i>New Product
+    </button>
+</div>
+
+<!-- Filters -->
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body p-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Name</label>
+                <input class="form-control form-control-sm" placeholder="Search…"
+                       value="@_fName" @oninput="HandleNameInput" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Category</label>
+                <select class="form-select form-select-sm" @bind="_fCategory" @bind:after="Reload">
+                    <option value="">All</option>
+                    @foreach (var c in Categories) { <option>@c</option> }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Min Price</label>
+                <input class="form-control form-control-sm" type="number" step="0.01"
+                       @bind="_fMinPrice" @bind:after="Reload" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Max Price</label>
+                <input class="form-control form-control-sm" type="number" step="0.01"
+                       @bind="_fMaxPrice" @bind:after="Reload" />
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-outline-secondary btn-sm" @onclick="ClearFilters">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th class="sortable" @onclick='@(() => SortBy("name"))'>
+                        Name @SortIcon("name")
+                    </th>
+                    <th class="sortable" @onclick='@(() => SortBy("category"))'>
+                        Category @SortIcon("category")
+                    </th>
+                    <th class="sortable" @onclick='@(() => SortBy("price"))'>
+                        Price @SortIcon("price")
+                    </th>
+                    <th class="sortable" @onclick='@(() => SortBy("stockQuantity"))'>
+                        Stock @SortIcon("stockQuantity")
+                    </th>
+                    <th>Barcode</th>
+                    <th style="width:100px">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_loading)
+                {
+                    <tr><td colspan="6" class="text-center py-4">
+                        <div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading…
+                    </td></tr>
+                }
+                else if (!_products.Any())
+                {
+                    <tr><td colspan="6" class="text-center py-4 text-muted">No products found.</td></tr>
+                }
+                else
+                {
+                    @foreach (var p in _products)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@p.Name</td>
+                            <td><span class="badge @CategoryBadge(p.Category)">@p.Category</span></td>
+                            <td>@p.Price.ToString("C2")</td>
+                            <td>
+                                <span class="@(p.StockQuantity < 50 ? "text-danger fw-bold" : "")">
+                                    @p.StockQuantity
+                                </span>
+                            </td>
+                            <td><code class="small">@p.Barcode</code></td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary me-1"
+                                        @onclick="@(() => OpenEdit(p))" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger"
+                                        @onclick="@(() => DeleteProduct(p))" title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+        <Pagination TotalCount="_total" PageSize="_pageSize"
+                    CurrentPage="_page" OnPageChanged="OnPageChanged" />
+        <select class="form-select form-select-sm w-auto" @bind="_pageSize" @bind:after="Reload">
+            <option value="5">5 / page</option>
+            <option value="10">10 / page</option>
+            <option value="20">20 / page</option>
+            <option value="50">50 / page</option>
+        </select>
+    </div>
+</div>
+
+<!-- Alert -->
+@if (_alert != null)
+{
+    <div class="alert @_alertCss alert-dismissible mt-3" role="alert">
+        @_alert
+        <button type="button" class="btn-close" @onclick="@(() => _alert = null)"></button>
+    </div>
+}
+
+<!-- Modal form -->
+@if (_showForm)
+{
+    <ProductFormModal Product="_editing" OnSave="OnSaved" OnCancel="@(() => _showForm = false)" />
+}
+
+<!-- Confirm delete -->
+<ConfirmModal @ref="_confirm" Message="@_confirmMsg" />
+
+@code {
+    private static readonly string[] Categories =
+        ["Fruits", "Vegetables", "Dairy", "Bakery", "Beverages"];
+
+    private List<ProductDto> _products = new();
+    private int    _total;
+    private int    _page;
+    private int    _pageSize    = 10;
+    private string _sortField   = "name";
+    private string _sortDir     = "asc";
+    private bool   _loading     = true;
+    private bool   _showForm;
+    private string? _alert;
+    private string  _alertCss   = "alert-success";
+
+    private string? _fName;
+    private string  _fCategory  = "";
+    private decimal? _fMinPrice;
+    private decimal? _fMaxPrice;
+
+    private ProductDto? _editing;
+    private string _confirmMsg = "Are you sure?";
+    private ConfirmModal _confirm = default!;
+
+    protected override async Task OnInitializedAsync() => await Reload();
+
+    private async Task Reload()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        var filter = BuildFilter();
+        var spec   = new QuerySpec
+        {
+            From    = "products",
+            Filter  = filter,
+            OrderBy = new() { new OrderBySpec { Field = _sortField, Direction = _sortDir } },
+            Page    = new PageSpec { From = _page * _pageSize, Offset = _pageSize }
+        };
+
+        var (items, total) = await Api.QueryAsync<ProductDto>("products", spec);
+        _products = items;
+        _total    = total;
+        _loading  = false;
+    }
+
+    private Dictionary<string, object>? BuildFilter()
+    {
+        var f = new Dictionary<string, object>();
+        if (!string.IsNullOrWhiteSpace(_fName))     f["name"]     = new { like = $"%{_fName}%" };
+        if (!string.IsNullOrWhiteSpace(_fCategory)) f["category"] = (object)_fCategory;
+        if (_fMinPrice.HasValue && _fMaxPrice.HasValue)
+            f["price"] = new { gte = _fMinPrice.Value, lte = _fMaxPrice.Value };
+        else if (_fMinPrice.HasValue) f["price"] = new { gte = _fMinPrice.Value };
+        else if (_fMaxPrice.HasValue) f["price"] = new { lte = _fMaxPrice.Value };
+        return f.Any() ? f : null;
+    }
+
+    private void HandleNameInput(ChangeEventArgs e)
+    {
+        _fName = e.Value?.ToString() ?? "";
+        ScheduleReload();
+    }
+
+    private System.Threading.Timer? _debounce;
+    private void ScheduleReload()
+    {
+        _debounce?.Dispose();
+        _debounce = new System.Threading.Timer(async _ =>
+        {
+            _page = 0;
+            await InvokeAsync(Reload);
+        }, null, 400, System.Threading.Timeout.Infinite);
+    }
+
+    private void OnFilterInput(ChangeEventArgs _) => ScheduleReload();
+
+    private async Task OnPageChanged(int page) { _page = page; await Reload(); }
+
+    private async Task SortBy(string field)
+    {
+        if (_sortField == field) _sortDir = _sortDir == "asc" ? "desc" : "asc";
+        else { _sortField = field; _sortDir = "asc"; }
+        _page = 0;
+        await Reload();
+    }
+
+    private void ClearFilters()
+    {
+        _fName = null; _fCategory = ""; _fMinPrice = null; _fMaxPrice = null;
+        _page  = 0;
+        _ = Reload();
+    }
+
+    private void OpenCreate() { _editing = new ProductDto(); _showForm = true; }
+    private void OpenEdit(ProductDto p) { _editing = p; _showForm = true; }
+
+    private async Task OnSaved()
+    {
+        _showForm = false;
+        ShowAlert("Saved successfully.", "alert-success");
+        await Reload();
+    }
+
+    private async Task DeleteProduct(ProductDto p)
+    {
+        _editing     = p;
+        _confirmMsg  = $"Delete product \"{p.Name}\"? This action cannot be undone.";
+        if (!await _confirm.ShowAsync()) return;
+        try
+        {
+            await Api.DeleteAsync("products", p.Id);
+            ShowAlert($"Product \"{p.Name}\" deleted.", "alert-warning");
+            await Reload();
+        }
+        catch { ShowAlert("Delete failed.", "alert-danger"); }
+    }
+
+    private void ShowAlert(string msg, string css)
+    {
+        _alert    = msg;
+        _alertCss = css;
+        StateHasChanged();
+        Task.Delay(3000).ContinueWith(_ => InvokeAsync(() => { _alert = null; StateHasChanged(); }));
+    }
+
+    private RenderFragment SortIcon(string field) => __builder =>
+    {
+        if (_sortField != field) return;
+        __builder.AddMarkupContent(0,
+            _sortDir == "asc"
+                ? "<i class=\"bi bi-caret-up-fill ms-1 text-muted small\"></i>"
+                : "<i class=\"bi bi-caret-down-fill ms-1 text-muted small\"></i>");
+    };
+
+    private static string CategoryBadge(string cat) => cat switch
+    {
+        "Fruits"     => "bg-success",
+        "Vegetables" => "bg-success bg-opacity-75",
+        "Dairy"      => "bg-info text-dark",
+        "Bakery"     => "bg-warning text-dark",
+        "Beverages"  => "bg-primary",
+        _            => "bg-secondary"
+    };
+}
