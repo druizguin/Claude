@@ -1,0 +1,191 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Audit Explorer";
+}
+
+<div class="container-fluid mt-3">
+    <div class="row mb-3 align-items-center">
+        <div class="col-md-6">
+            <h2><i class="bi bi-journal-check"></i> Registro de Auditorías</h2>
+        </div>
+        <div class="col-md-4">
+            <div class="input-group">
+                <input type="text" id="userIdFilter" class="form-control" placeholder="Filtrar por UserId..." />
+                <button class="btn btn-primary" onclick="applyUserFilter()">Buscar</button>
+                <button class="btn btn-outline-secondary" onclick="clearFilter()">Limpiar</button>
+            </div>
+        </div>
+        <div class="col-md-2 text-end">
+            <span class="badge bg-secondary" id="totalBadge">0 registros</span>
+        </div>
+    </div>
+
+    <div id="audit-table"></div>
+</div>
+
+<!-- Modal de Detalle (estilo git diff) -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <div>
+                    <h5 class="modal-title mb-0" id="detailTitle">Detalle de Auditoría</h5>
+                    <small id="detailMeta" class="text-light"></small>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="diffContainer" class="font-monospace"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+const API_BASE = '@Model.ApiBaseUrl';
+let currentUserId = null;
+
+// ── Tabulator ──────────────────────────────────────────────────────────────
+const table = new Tabulator("#audit-table", {
+    height: "calc(100vh - 160px)",
+    layout: "fitColumns",
+    responsiveLayout: "collapse",
+    pagination: true,
+    paginationMode: "remote",
+    paginationSize: 20,
+    paginationSizeSelector: [10, 20, 50, 100],
+    sortMode: "remote",
+    ajaxURL: `${API_BASE}api/audits`,
+    ajaxConfig: "GET",
+    ajaxURLGenerator: (url, config, params) => {
+        const page     = params.page || 1;
+        const pageSize = params.size || 20;
+        const base     = currentUserId
+            ? `${API_BASE}api/audits/user/${encodeURIComponent(currentUserId)}`
+            : `${API_BASE}api/audits`;
+        return `${base}?page=${page}&pageSize=${pageSize}`;
+    },
+    ajaxResponse: (url, params, response) => {
+        document.getElementById("totalBadge").textContent = `${response.total} registros`;
+        return {
+            last_page: Math.ceil(response.total / (params.size || 20)),
+            data: response.data
+        };
+    },
+    columns: [
+        { title: "Timestamp",   field: "timestamp",  width: 180,
+          formatter: cell => new Date(cell.getValue()).toLocaleString() },
+        { title: "UserId",      field: "userId",     width: 150, headerFilter: "input" },
+        { title: "Entidad",     field: "entityName", width: 160 },
+        { title: "EntityId",    field: "entityId",   width: 300,
+          formatter: "textarea", cssClass: "text-muted small" },
+        { title: "Acción",      field: "action",     width: 100,
+          formatter: actionFormatter },
+        { title: "Cambios",     field: "details",    width: 80,
+          formatter: cell => `<span class="badge bg-info">${(cell.getValue() || []).length}</span>`,
+          hozAlign: "center" }
+    ],
+    rowClick: (e, row) => showDetail(row.getData()),
+    rowFormatter: row => row.getElement().style.cursor = "pointer"
+});
+
+function actionFormatter(cell) {
+    const colors = { Create: "success", Update: "warning", Delete: "danger", Read: "secondary" };
+    const v = cell.getValue();
+    return `<span class="badge bg-${colors[v] || 'secondary'}">${v}</span>`;
+}
+
+// ── Filtro por usuario ─────────────────────────────────────────────────────
+function applyUserFilter() {
+    currentUserId = document.getElementById("userIdFilter").value.trim() || null;
+    table.setPage(1);
+    table.replaceData();
+}
+
+function clearFilter() {
+    currentUserId = null;
+    document.getElementById("userIdFilter").value = "";
+    table.setPage(1);
+    table.replaceData();
+}
+
+document.getElementById("userIdFilter").addEventListener("keydown", e => {
+    if (e.key === "Enter") applyUserFilter();
+});
+
+// ── Modal de detalle (git-diff) ────────────────────────────────────────────
+async function showDetail(audit) {
+    document.getElementById("detailTitle").textContent =
+        `Auditoría: ${audit.entityName} — ${audit.action}`;
+    document.getElementById("detailMeta").textContent =
+        `ID: ${audit.id}  |  Usuario: ${audit.userId}  |  ${new Date(audit.timestamp).toLocaleString()}`;
+
+    let details = audit.details;
+    if (!details || details.length === 0) {
+        const resp = await fetch(`${API_BASE}api/audits/${audit.id}`);
+        const full = await resp.json();
+        details = full.details || [];
+    }
+
+    renderDiff(details);
+    new bootstrap.Modal(document.getElementById("detailModal")).show();
+}
+
+function renderDiff(details) {
+    const container = document.getElementById("diffContainer");
+    if (!details || details.length === 0) {
+        container.innerHTML = '<div class="p-4 text-muted">Sin cambios registrados.</div>';
+        return;
+    }
+
+    const rows = details.map(d => {
+        const propLabel = `<span class="text-primary fw-bold">${escHtml(d.propertyName)}</span>`;
+        const removed   = d.oldValue !== null && d.oldValue !== undefined
+            ? `<div class="diff-removed px-3 py-1">- ${formatValue(d.oldValue)}</div>` : "";
+        const added     = d.newValue !== null && d.newValue !== undefined
+            ? `<div class="diff-added px-3 py-1">+ ${formatValue(d.newValue)}</div>` : "";
+
+        return `
+        <div class="diff-block border-bottom">
+            <div class="diff-header bg-light px-3 py-1 text-muted small">
+                @@ ${propLabel} @@
+            </div>
+            ${removed}
+            ${added}
+        </div>`;
+    }).join("");
+
+    container.innerHTML = rows;
+}
+
+function formatValue(val) {
+    if (!val) return '<em class="text-muted">(vacío)</em>';
+    try {
+        const parsed = JSON.parse(val);
+        if (typeof parsed === "object" && parsed !== null)
+            return flattenObject(parsed).map(([k, v]) =>
+                `<span class="text-secondary">${escHtml(k)}:</span> ${escHtml(String(v))}`
+            ).join("<br>");
+    } catch { }
+    return escHtml(String(val));
+}
+
+function flattenObject(obj, prefix = "") {
+    return Object.entries(obj).flatMap(([k, v]) => {
+        const key = prefix ? `${prefix}.${k}` : k;
+        return v && typeof v === "object" && !Array.isArray(v)
+            ? flattenObject(v, key)
+            : [[key, v]];
+    });
+}
+
+function escHtml(s) {
+    return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
+</script>
+}

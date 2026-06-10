@@ -1,0 +1,11 @@
+<Solution>
+  <Project Path="Audit.Api/Audit.Api.csproj" />
+  <Project Path="Audit.BDD.Tests/Audit.BDD.Tests.csproj" />
+  <Project Path="Audit.Data/Audit.Data.csproj" />
+  <Project Path="Audit.Demo/Audit.Demo.csproj" />
+  <Project Path="Audit.Dom/Audit.Dom.csproj" />
+  <Project Path="Audit.Entities.Dom/Audit.Entities.Dom.csproj" />
+  <Project Path="Audit.Svc/Audit.Svc.csproj" />
+  <Project Path="Audit.Tests/Audit.Tests.csproj" />
+  <Project Path="Audit.Web/Audit.Web.csproj" />
+</Solution>

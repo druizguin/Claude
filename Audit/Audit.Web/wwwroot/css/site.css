@@ -1,0 +1,41 @@
+html {
+  font-size: 14px;
+}
+
+@media (min-width: 768px) {
+  html {
+    font-size: 16px;
+  }
+}
+
+.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
+  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+}
+
+html {
+  position: relative;
+  min-height: 100%;
+}
+
+body {
+  margin-bottom: 60px;
+}
+
+/* ── Git-diff styles ─────────────────────────────────────────────── */
+.diff-block { font-size: 13px; }
+.diff-header { background: #f6f8fa; color: #6a737d; border-bottom: 1px solid #e1e4e8; }
+.diff-removed {
+    background: #ffeef0;
+    color: #b31d28;
+    border-left: 4px solid #f97583;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+.diff-added {
+    background: #e6ffed;
+    color: #22863a;
+    border-left: 4px solid #34d058;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+#audit-table .tabulator-row:hover { background: #f0f4ff !important; }

@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="FluentAssertions" Version="*" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.*" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="*" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="SpecFlow.xUnit" Version="3.9.*" />
+    <PackageReference Include="SpecFlow.Plus.LivingDocPlugin" Version="3.9.*" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Features\**\*.feature">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Audit.Svc\Audit.Svc.csproj" />
+    <ProjectReference Include="..\Audit.Dom\Audit.Dom.csproj" />
+    <ProjectReference Include="..\Audit.Api\Audit.Api.csproj" />
+    <ProjectReference Include="..\Audit.Data\Audit.Data.csproj" />
+  </ItemGroup>
+
+  <!--
+    Genera LivingDoc.html en el directorio de salida tras la ejecución de tests.
+    Requiere: dotnet tool restore (instala SpecFlow.Plus.LivingDoc.Cli desde .config/dotnet-tools.json)
+  -->
+  <Target Name="GenerateLivingDoc" AfterTargets="VSTest">
+    <Message Text="Generando LivingDoc HTML report..." Importance="high" />
+    <MakeDir Directories="$(OutputPath)TestResults" />
+    <Exec Command="dotnet tool restore"
+          WorkingDirectory="$(MSBuildProjectDirectory)"
+          ContinueOnError="true" />
+    <Exec Command="dotnet tool run livingdoc test-assembly &quot;$(TargetPath)&quot; --output &quot;$(OutputPath)TestResults\LivingDoc.html&quot;"
+          WorkingDirectory="$(MSBuildProjectDirectory)"
+          ContinueOnError="true" />
+    <Message Text="LivingDoc report → $(OutputPath)TestResults\LivingDoc.html" Importance="high" />
+  </Target>
+
+</Project>
